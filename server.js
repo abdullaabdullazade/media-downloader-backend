@@ -1,38 +1,19 @@
 const express = require("express");
 const { exec } = require("child_process");
-const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
 const path = require("path");
 const bodyParser = require("body-parser");
-
+const util = require("util");
+const execPromise = util.promisify(exec);
 const app = express();
 const port = 3000;
-
-cloudinary.config({
-  cloud_name: "dhwumjwk1",
-  api_key: "497861313575895",
-  api_secret: "ueCODC6-J2kmdKt3WEKOhjEwV9A",
-});
 
 app.use(bodyParser.json());
 
 const DOWNLOADS_FOLDER = path.join(__dirname, "downloads");
 if (!fs.existsSync(DOWNLOADS_FOLDER)) fs.mkdirSync(DOWNLOADS_FOLDER);
 
-app.post("/delete-video", async (req, res) => {
-  let { fileName } =  req.body; // Burada fileName artıq Cloudinary public_id olacaq
-  console.log(fileName,req.body);
-
-  if (!fileName)
-    return res.status(400).json({ error: "Fayl adı təqdim edilməyib" });
-  try {
-    await cloudinary.uploader.destroy(fileName, { resource_type: "video" });
-    return res.json({ success: true, message: "Video silindi" });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({ success: false, message: "Silinmədi", error });
-  }
-});
+app.use("/videos", express.static(DOWNLOADS_FOLDER));
 
 app.post("/upload-video", async (req, res) => {
   const { url } = req.body;
@@ -42,21 +23,37 @@ app.post("/upload-video", async (req, res) => {
   const fileName = `video_${Date.now()}.mp4`;
   const filePath = path.join(DOWNLOADS_FOLDER, fileName);
 
-  const command = `yt-dlp -o "${filePath}" ${url}`;
-  exec(command, async (error, stdout, stderr) => {
-    if (error) return res.status(500).json({ error: "Video yüklənmədi" });
+  const command = `yt-dlp --no-playlist -f mp4 -o "${filePath}" "${url}"`;
 
-    try {
-      const result = await cloudinary.uploader.upload(filePath, {
-        resource_type: "video",
-        folder: "my_videos",
-      });
+  try {
+    const { stdout, stderr } = await execPromise(command);
+    console.log("YT-DLP stdout:", stdout);
+    console.log("YT-DLP stderr:", stderr);
+    console.log("Fayl uğurla yükləndi:", filePath);
 
-      fs.unlinkSync(filePath); // Yerli faylı sil
-      res.json({ url: result.secure_url, fileName: result.public_id });
-    } catch (uploadError) {
-      res.status(500).json({ error: "Cloudinary-ə yüklənmədi" });
+    const localUrl = `http://192.168.100.54:${port}/videos/${fileName}`;
+    return res.json({ url: localUrl, fileName });
+  } catch (error) {
+    console.error("Video yüklənmə xətası:", error);
+    return res
+      .status(500)
+      .json({ error: "Video yüklənmədi", details: error.message });
+  }
+});
+
+app.post("/delete-video", async (req, res) => {
+  let { fileName } = req.body;
+
+  if (!fileName)
+    return res.status(400).json({ error: "Fayl adı təqdim edilməyib" });
+
+  const filePath = path.join(DOWNLOADS_FOLDER, fileName);
+
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: "Silinmədi" });
     }
+    res.json({ success: true, message: "Video silindi" });
   });
 });
 
