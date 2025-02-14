@@ -8,12 +8,19 @@ const execPromise = util.promisify(exec);
 const app = express();
 const port = 3000;
 
-app.use(bodyParser.json());
+const NodeCache = require("node-cache");
+const myCache = new NodeCache();
 
-const DOWNLOADS_FOLDER = path.join(__dirname, "downloads");
+app.use(bodyParser.json()); //body parserden daha atmaq ucun
+
+const LINK = "http://185.207.251.177:3000";
+
+const DOWNLOADS_FOLDER = path.join(__dirname, "downloads");//downloads-i teyin edirik
 if (!fs.existsSync(DOWNLOADS_FOLDER)) fs.mkdirSync(DOWNLOADS_FOLDER);
 
 app.use("/videos", express.static(DOWNLOADS_FOLDER));
+
+//express.static(download_folder) teyin edirem
 
 app.post("/upload-video", async (req, res) => {
   const { url } = req.body;
@@ -22,16 +29,20 @@ app.post("/upload-video", async (req, res) => {
 
   const fileName = `video_${Date.now()}.mp4`;
   const filePath = path.join(DOWNLOADS_FOLDER, fileName);
+  const proxy = "http://ezhdkibx:2jkx383c9xc9@23.27.209.78:6097";
 
-  const command = `yt-dlp --no-playlist -f mp4 -o "${filePath}" "${url}"`;
+  const command = `yt-dlp --no-playlist -f mp4 --proxy ${proxy} -o "${filePath}" "${url}"`;
 
   try {
     const { stdout, stderr } = await execPromise(command);
     console.log("YT-DLP stdout:", stdout);
     console.log("YT-DLP stderr:", stderr);
     console.log("Fayl uğurla yükləndi:", filePath);
-
-    const localUrl = `http://192.168.100.54:${port}/videos/${fileName}`;
+    myCache.flushAll();
+    
+    //const localUrl = `http://192.168.100.54:${port}/videos/${fileName}`;
+    const localUrl = `${LINK}/videos/${fileName}`;
+    console.log(localUrl);
     return res.json({ url: localUrl, fileName });
   } catch (error) {
     console.error("Video yüklənmə xətası:", error);
@@ -49,7 +60,7 @@ app.post("/delete-video", async (req, res) => {
 
   const filePath = path.join(DOWNLOADS_FOLDER, fileName);
 
-  fs.unlink(filePath, (err) => {
+  fs.unlink(filePath, (err) => {//bunu then ile de etmek olardi lakin etmirik ele err bosdursa false olur be res json qaytarir
     if (err) {
       return res.status(500).json({ success: false, message: "Silinmədi" });
     }
