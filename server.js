@@ -29,7 +29,7 @@ app.use("/videos", express.static(DOWNLOADS_FOLDER));
 app.post("/upload-video", async (req, res) => {
   const { url } = req.body;
   if (!url)
-    return res.status(400).json({ error: "Video linki təqdim edilməyib" });
+    return res.status(400).json({ error: "please send video link" });
 
   const fileName = `video_${Date.now()}.mp4`;
   const filePath = path.join(DOWNLOADS_FOLDER, fileName);
